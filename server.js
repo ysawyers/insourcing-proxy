@@ -1,9 +1,14 @@
 import http from "http";
+import WebSocket, { WebSocketServer as WSWebSocketServer } from "ws";
+import { onMessage } from "./handlers.js";
 
 // NOTE: Not sure how long a request should wait before throwing
-let seconds = 15;
+const seconds = 15;
+const WebSocketServer = WebSocket.Server || WSWebSocketServer;
 
 export default class Server {
+  static wss = new WebSocketServer({ noServer: true });
+
   constructor(port, host) {
     this.routes = {
       GET: {},
@@ -34,6 +39,7 @@ export default class Server {
 
   listenAndServe(cb) {
     const requestListener = (req, res) => {
+      // NOTE: Just a potential change for future reference
       res.setHeader("Content-Type", "application/json");
 
       if (req.url !== "/favicon.ico") {
@@ -61,7 +67,24 @@ export default class Server {
       }
     };
     this.server = http.createServer(requestListener);
+    // NOTE: Might need to strip http/https if they include pass into constructor
+    Server.wss.on("connection", function connection(ws) {
+      Server.wss.on("error", console.error);
 
+      ws.on("message", onMessage);
+    });
+
+    this.server.on("upgrade", function upgrade(request, socket, head) {
+      const pathname = request.url;
+
+      if (pathname === "/") {
+        Server.wss.handleUpgrade(request, socket, head, function done(ws) {
+          Server.wss.emit("connection", ws, request);
+        });
+      } else {
+        socket.destroy();
+      }
+    });
     this.server.listen(this.port, this.host, cb);
   }
 }
