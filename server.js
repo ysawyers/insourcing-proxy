@@ -18,9 +18,11 @@ export default class Server {
 
     this.port = port;
     this.host = host;
+    this.sockets = {};
   }
 
-  queryRoutes(requestType, branch) {
+  // NOTE: Check Mbps for exceeding threshold
+  queryRoutes(requestType, branch, networkLatencyMbps) {
     let destinations = branch.split("/");
     if (destinations[0] == "") {
       destinations.shift();
@@ -34,17 +36,43 @@ export default class Server {
       currentNode = currentNode["/" + nextDest];
     }
 
+    if (networkLatencyMbps < currentNode.thresholds.latency) {
+      console.log("Time to insource!");
+    }
+
     return currentNode.cb;
+  }
+
+  parseCookies(req) {
+    let networkLatencyMbps;
+
+    let cookieHeaders = req.headers?.cookie.split("; ");
+    for (const cookieHeader of cookieHeaders) {
+      let cookie = cookieHeader.split("=");
+      if (cookie[0] === "avgLatency") {
+        networkLatencyMbps = parseFloat(cookie[1]);
+      }
+    }
+    return networkLatencyMbps;
   }
 
   listenAndServe(cb) {
     const requestListener = (req, res) => {
       // NOTE: Just a potential change for future reference
+      res.setHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+      res.setHeader("Access-Control-Allow-Credentials", "true");
+
       res.setHeader("Content-Type", "application/json");
 
       if (req.url !== "/favicon.ico") {
         try {
-          const cb = this.queryRoutes(req.method, req.url);
+          const networkLatencyMbps = this.parseCookies(req);
+
+          console.log(
+            "Network latency on request (Mbps): " + networkLatencyMbps
+          );
+
+          const cb = this.queryRoutes(req.method, req.url, networkLatencyMbps);
 
           let requestTimer = setTimeout(() => {
             throw new Error("Gateway Timeout");
@@ -71,7 +99,9 @@ export default class Server {
     Server.wss.on("connection", function connection(ws) {
       Server.wss.on("error", console.error);
 
-      ws.on("message", onMessage);
+      ws.on("message", (data, isBinary) => {
+        onMessage(data, isBinary, ws);
+      });
     });
 
     this.server.on("upgrade", function upgrade(request, socket, head) {
