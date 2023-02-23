@@ -2,13 +2,14 @@ import Server from "./server.js";
 
 export class Router extends Server {
   async computeThreshold(cb) {
-    console.time();
-    try {
-      await cb();
-    } catch (_) {
-      console.log("dsdasdsa");
-    }
-    console.timeEnd();
+    // console.time();
+    // try {
+    //   await cb();
+    // } catch (_) {
+    //   console.log("dsdasdsa");
+    // }
+    // console.timeEnd();
+
     return {
       latency: 15,
     };

@@ -21,8 +21,7 @@ export default class Server {
     this.sockets = {};
   }
 
-  // NOTE: Check Mbps for exceeding threshold
-  queryRoutes(requestType, branch, networkLatencyMbps) {
+  async queryRoutes(requestType, branch, networkLatencyMbps) {
     let destinations = branch.split("/");
     if (destinations[0] == "") {
       destinations.shift();
@@ -35,12 +34,14 @@ export default class Server {
       }
       currentNode = currentNode["/" + nextDest];
     }
+    let thresholds = await currentNode.thresholds;
 
-    if (networkLatencyMbps < currentNode.thresholds.latency) {
-      console.log("Time to insource!");
+    let shouldInsource = false;
+    if (networkLatencyMbps < thresholds.latency) {
+      shouldInsource = true;
     }
 
-    return currentNode.cb;
+    return [currentNode.cb, shouldInsource ? branch : null];
   }
 
   parseCookies(req) {
@@ -57,8 +58,7 @@ export default class Server {
   }
 
   listenAndServe(cb) {
-    const requestListener = (req, res) => {
-      // NOTE: Just a potential change for future reference
+    const requestListener = async (req, res) => {
       res.setHeader("Access-Control-Allow-Origin", "http://localhost:3000");
       res.setHeader("Access-Control-Allow-Credentials", "true");
 
@@ -72,35 +72,32 @@ export default class Server {
             "Network latency on request (Mbps): " + networkLatencyMbps
           );
 
-          const cb = this.queryRoutes(req.method, req.url, networkLatencyMbps);
+          const [cb, branch] = await this.queryRoutes(
+            req.method,
+            req.url,
+            networkLatencyMbps
+          );
 
-          let requestTimer = setTimeout(() => {
-            throw new Error("Gateway Timeout");
-          }, seconds * 1000);
-          requestTimer.unref();
+          res.setHeader(
+            "Set-Cookie",
+            `insourceBranch=${branch}; Path=/; Domain=localhost`
+          );
 
-          cb(req, res);
-
-          if (res.headersSent) {
-            requestTimer.close();
-          }
-          return;
+          await cb(req, res);
         } catch (e) {
           if (e.message === "Not Found") {
             res.writeHead(404);
-          } else if (e.message === "Gateway Timeout") {
-            res.writeHead(504);
           }
         }
       }
     };
     this.server = http.createServer(requestListener);
-    // NOTE: Might need to strip http/https if they include pass into constructor
+
     Server.wss.on("connection", function connection(ws) {
       Server.wss.on("error", console.error);
 
-      ws.on("message", (data, isBinary) => {
-        onMessage(data, isBinary, ws);
+      ws.on("message", (data, _) => {
+        onMessage(data, this.routes, ws);
       });
     });
 

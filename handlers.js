@@ -1,16 +1,11 @@
+import Server from "./server.js";
+
 export const onMessage = (data, _, ws) => {
-  // const Mbps = parseInt(String.fromCharCode(...data).toString());
-  // // NOTE: Ugly code try to make nicer.
-  // try {
-  //   ws.userData.entries += 1;
-  //   ws.userData.totalSum += Mbps;
-  //   console.log("Average Mbps: " + ws.userData.totalSum / ws.userData.entries);
-  // } catch (_) {
-  //   ws.userData = {
-  //     entries: 1,
-  //     totalSum: Mbps,
-  //   };
-  // }
+  const branch = String.fromCharCode(...data).toString();
+
+  console.log("Compile bytecode of: " + branch);
+
+  ws.send(`Insourced Bytecode (${branch}): []`);
 };
 
 export const insource = () => {};
