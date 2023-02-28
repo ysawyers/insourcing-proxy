@@ -2,20 +2,17 @@ import http from "http";
 import WebSocket, { WebSocketServer as WSWebSocketServer } from "ws";
 import { onMessage } from "./handlers.js";
 
-// NOTE: Not sure how long a request should wait before throwing
-const seconds = 15;
 const WebSocketServer = WebSocket.Server || WSWebSocketServer;
 
 export default class Server {
   static wss = new WebSocketServer({ noServer: true });
+  static routes = {
+    GET: {},
+    POST: {},
+    DELETE: {},
+  };
 
   constructor(port, host) {
-    this.routes = {
-      GET: {},
-      POST: {},
-      DELETE: {},
-    };
-
     this.port = port;
     this.host = host;
     this.sockets = {};
@@ -27,7 +24,7 @@ export default class Server {
       destinations.shift();
     }
 
-    let currentNode = this.routes[requestType];
+    let currentNode = Server.routes[requestType];
     for (const nextDest of destinations) {
       if (currentNode["/" + nextDest] === undefined) {
         throw new Error("Not Found");
@@ -35,6 +32,8 @@ export default class Server {
       currentNode = currentNode["/" + nextDest];
     }
     let thresholds = await currentNode.thresholds;
+
+    console.log(currentNode);
 
     let shouldInsource = false;
     if (networkLatencyMbps < thresholds.latency) {
@@ -66,7 +65,8 @@ export default class Server {
 
       if (req.url !== "/favicon.ico") {
         try {
-          const networkLatencyMbps = this.parseCookies(req);
+          // const networkLatencyMbps = this.parseCookies(req);
+          const networkLatencyMbps = 15;
 
           console.log(
             "Network latency on request (Mbps): " + networkLatencyMbps
