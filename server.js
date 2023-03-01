@@ -33,8 +33,6 @@ export default class Server {
     }
     let thresholds = await currentNode.thresholds;
 
-    console.log(currentNode);
-
     let shouldInsource = false;
     if (networkLatencyMbps < thresholds.latency) {
       shouldInsource = true;

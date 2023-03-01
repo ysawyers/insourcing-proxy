@@ -1,6 +1,5 @@
-import async_hooks from "node:async_hooks";
+import async_hooks, { triggerAsyncId } from "node:async_hooks";
 import httpMocks from "node-mocks-http";
-import fs from "fs";
 
 import { Router } from "./index.js";
 
@@ -17,56 +16,66 @@ export let tracedRoutes = {
   DELETE: {},
 };
 
-function init(asyncId, type, triggerAsyncId) {
+function init(asyncId, type) {
   if (type === "TCPWRAP") {
-    time = process.hrtime();
-    currentTriggerId = triggerAsyncId;
-
-    fs.writeSync(
-      1,
-      `Init ${type} resource: asyncId: ${asyncId} trigger: ${triggerAsyncId}\n`
-    );
+    currentTriggerId = asyncId;
   }
 }
 
-function promiseResolve(asyncId) {
+function before() {
+  if (triggerAsyncId() === currentTriggerId) {
+    time = process.hrtime();
+  }
+}
+
+function after(asyncId) {
   if (asyncId === currentTriggerId) {
     const diff = process.hrtime(time);
     const ms = diff[0] * NS_PER_SEC + diff[1] * MS_PER_NS;
-
-    // console.log(`Promise Resolve: ${ms.toFixed(2)}ms`);
 
     const destination = Router.populateRoutes(this.requestType, this.branch);
     destination.metrics = {
       timeElapsed: parseFloat(ms.toFixed(2)),
     };
+
+    console.log(destination);
   }
 }
 
-const asyncHooks = async_hooks.createHook({
-  init,
-  promiseResolve,
-});
-
-function sleep(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
+function sleep(delay) {
+  var start = new Date().getTime();
+  while (new Date().getTime() < start + delay);
 }
 
 export async function profileAsyncRoute(requestType, branch, cb) {
   const mockRequest = httpMocks.createRequest({
     method: requestType,
     url: branch,
+    // Prevent node from re-using connection
+    agent: false,
+    headers: {
+      "cache-control": "no-cache",
+    },
     params: {},
   });
   const mockResponse = httpMocks.createResponse();
 
-  asyncHooks.enable();
-  await sleep(0);
+  const asyncHooks = async_hooks
+    .createHook({
+      init,
+      before,
+      after,
+    })
+    .enable();
 
   Object.assign(asyncHooks, { branch, requestType });
   await cb(mockRequest, mockResponse);
-
-  asyncHooks.disable();
 }
+
+/**
+ *
+ * TODO:
+ *  Fix racing conditions
+ *
+ *
+ */
