@@ -1,9 +1,23 @@
 import Server from "./server.js";
-import { profileAsyncRoute } from "./hooks.js";
+import async_hooks from "node:async_hooks";
+import { init, before, after } from "./hooks.js";
 
 export class Router extends Server {
-  async computeThreshold(requestType, branch, cb) {
-    await profileAsyncRoute(requestType, branch, cb);
+  async computeThreshold(requestType, destination, cb) {
+    destination.profiler = async_hooks.createHook({
+      init,
+      before,
+      after,
+    });
+    destination.cb = cb;
+    destination.metrics = {
+      timeElapsed: 0,
+    };
+
+    Object.assign(destination.profiler, {
+      requestType,
+      destination,
+    });
 
     return {
       latency: 15,
@@ -30,22 +44,22 @@ export class Router extends Server {
 
   get(branch, cb) {
     let destination = Router.populateRoutes("GET", branch);
-    destination.cb = cb;
+    destination.branch = branch;
 
-    destination.thresholds = this.computeThreshold("GET", branch, cb);
+    destination.thresholds = this.computeThreshold("GET", destination, cb);
   }
 
   post(branch, cb) {
-    let destination = Router.populateRoutes("POST", branch);
-    destination.cb = cb;
+    let destination = Router.populateRoutes("GET", branch);
+    destination.branch = branch;
 
-    destination.thresholds = this.computeThreshold("GET", branch, cb);
+    destination.thresholds = this.computeThreshold("GET", destination, cb);
   }
 
   delete(branch, cb) {
-    let destination = Router.computeThreshold("DELETE", branch);
-    destination.cb = cb;
+    let destination = Router.populateRoutes("GET", branch);
+    destination.branch = branch;
 
-    destination.thresholds = this.computeThreshold("GET", branch, cb);
+    destination.thresholds = this.computeThreshold("GET", destination, cb);
   }
 }

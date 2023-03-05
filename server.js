@@ -38,7 +38,7 @@ export default class Server {
       shouldInsource = true;
     }
 
-    return [currentNode.cb, shouldInsource ? branch : null];
+    return [currentNode, shouldInsource ? branch : null];
   }
 
   parseCookies(req) {
@@ -70,7 +70,7 @@ export default class Server {
             "Network latency on request (Mbps): " + networkLatencyMbps
           );
 
-          const [cb, branch] = await this.queryRoutes(
+          const [currentNode, branch] = await this.queryRoutes(
             req.method,
             req.url,
             networkLatencyMbps
@@ -81,7 +81,12 @@ export default class Server {
             `insourceBranch=${branch}; Path=/; Domain=localhost`
           );
 
-          await cb(req, res);
+          currentNode.metrics["timeElapsed"] = 0;
+
+          currentNode.profiler.enable();
+          await currentNode.cb(req, res);
+
+          console.log(currentNode);
         } catch (e) {
           if (e.message === "Not Found") {
             res.writeHead(404);
@@ -89,6 +94,7 @@ export default class Server {
         }
       }
     };
+
     this.server = http.createServer(requestListener);
 
     Server.wss.on("connection", function connection(ws) {
@@ -110,6 +116,7 @@ export default class Server {
         socket.destroy();
       }
     });
+
     this.server.listen(this.port, this.host, cb);
   }
 }
