@@ -46,9 +46,6 @@ export class Router extends Server {
     destination.branch = branch;
 
     this.#generateMetrics("GET", destination, cb);
-    destination.thresholds = {
-      latency: 15,
-    };
   }
 
   post(branch, cb) {
@@ -56,9 +53,6 @@ export class Router extends Server {
     destination.branch = branch;
 
     this.#generateMetrics("POST", destination, cb);
-    destination.thresholds = {
-      latency: 15,
-    };
   }
 
   put(branch, cb) {
@@ -66,9 +60,6 @@ export class Router extends Server {
     destination.branch = branch;
 
     this.#generateMetrics("PUT", destination, cb);
-    destination.thresholds = {
-      latency: 15,
-    };
   }
 
   delete(branch, cb) {
@@ -76,8 +67,5 @@ export class Router extends Server {
     destination.branch = branch;
 
     this.#generateMetrics("DELETE", destination, cb);
-    destination.thresholds = {
-      latency: 15,
-    };
   }
 }

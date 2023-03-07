@@ -1,7 +1,7 @@
 import http from "http";
 import process from "process";
 import WebSocket, { WebSocketServer as WSWebSocketServer } from "ws";
-import { onMessage } from "./handlers.js";
+import { insource } from "./handlers.js";
 
 const WebSocketServer = WebSocket.Server || WSWebSocketServer;
 
@@ -22,7 +22,7 @@ export default class Server {
     Server.routes.set("DELETE", new Map());
   }
 
-  #queryRoutes(requestType, branch, networkLatencyMbps) {
+  #queryRoutes(requestType, branch) {
     let destinations = branch.split("/");
     if (destinations[0] == "") {
       destinations.shift();
@@ -35,14 +35,8 @@ export default class Server {
       }
       currentNode = currentNode.get("/" + nextDest);
     }
-    let thresholds = currentNode.thresholds;
 
-    let shouldInsource = false;
-    if (networkLatencyMbps < thresholds.latency) {
-      shouldInsource = true;
-    }
-
-    return [currentNode, shouldInsource ? branch : null];
+    return currentNode;
   }
 
   #parseCookies(req) {
@@ -66,15 +60,12 @@ export default class Server {
 
       if (req.url !== "/favicon.ico") {
         try {
-          // const networkLatencyMbps = this.#parseCookies(req);
-          const [currentNode, branch] = this.#queryRoutes(
-            req.method,
-            req.url,
-            15
-          );
-          let startTime;
+          const currentNode = this.#queryRoutes(req.method, req.url);
 
+          let startTime;
           res.end = (data, encoding, callback) => {
+            const networkLatencyMbps = this.#parseCookies(req);
+
             const diff = process.hrtime(startTime);
             const endTime = diff[0] * NS_PER_SEC + diff[1] * MS_PER_NS;
 
@@ -90,6 +81,14 @@ export default class Server {
               (currentNode.metrics["tc"] / currentNode.metrics["en"]).toFixed(2)
             );
 
+            /*
+            
+            Find the defining difference
+
+            */
+
+            const branch = null;
+
             res.setHeader(
               "Set-Cookie",
               `insourceBranch=${branch}; Path=/; Domain=localhost`
@@ -98,6 +97,7 @@ export default class Server {
             console.log({
               avgElapsedNetworkTime,
               avgElapsedComputeTime,
+              clientLatencyMbps: networkLatencyMbps,
             });
 
             res.__proto__.end.call(res, data, encoding, callback);
@@ -120,19 +120,19 @@ export default class Server {
     };
     this.server = http.createServer(requestListener);
 
-    Server.wss.on("connection", function connection(ws) {
+    Server.wss.on("connection", (ws) => {
       Server.wss.on("error", console.error);
 
       ws.on("message", (data, _) => {
-        onMessage(data, Server.routes, ws);
+        insource(data, Server.routes, ws);
       });
     });
 
-    this.server.on("upgrade", function upgrade(request, socket, head) {
+    this.server.on("upgrade", (request, socket, head) => {
       const pathname = request.url;
 
       if (pathname === "/") {
-        Server.wss.handleUpgrade(request, socket, head, function done(ws) {
+        Server.wss.handleUpgrade(request, socket, head, (ws) => {
           Server.wss.emit("connection", ws, request);
         });
       } else {
