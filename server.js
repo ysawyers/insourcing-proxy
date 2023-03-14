@@ -61,7 +61,10 @@ export default class Server {
             const remainder = currentNode.profiler.currentlyElapsed;
             currentNode.metrics.en[0] = remainder;
 
-            const computeTime = elapsedTotalTime - remainder;
+            let totalNetworkTime = currentNode.metrics.en.reduce((a, b) => {
+              return a + b;
+            });
+            const computeTime = elapsedTotalTime - totalNetworkTime;
 
             const routeTelemetry = JSON.stringify({
               slug: currentNode.slug,
