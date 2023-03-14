@@ -8,6 +8,10 @@ const WebSocketServer = WebSocket.Server || WSWebSocketServer;
 const NS_PER_SEC = 1e9;
 const MS_PER_NS = 1e-6;
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export default class Server {
   static wss = new WebSocketServer({ noServer: true });
   static routes = new Map();
@@ -22,8 +26,8 @@ export default class Server {
     Server.routes.set("DELETE", new Map());
   }
 
-  #queryRoutes(requestType, branch) {
-    let destinations = branch.split("/");
+  #queryRoutes(requestType, slug) {
+    let destinations = slug.split("/");
     if (destinations[0] == "") {
       destinations.shift();
     }
@@ -39,24 +43,11 @@ export default class Server {
     return currentNode;
   }
 
-  #parseCookies(req) {
-    let networkLatencyMbps;
-
-    let cookieHeaders = req.headers?.cookie.split("; ");
-    for (const cookieHeader of cookieHeaders) {
-      let cookie = cookieHeader.split("=");
-      if (cookie[0] === "avgLatency") {
-        networkLatencyMbps = parseFloat(cookie[1]);
-      }
-    }
-    return networkLatencyMbps;
-  }
-
   listenAndServe(cb) {
     const requestListener = async (req, res) => {
-      res.setHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+      res.setHeader("Access-Control-Allow-Origin", "http://localhost:5500");
+      res.setHeader("access-control-expose-headers", "Set-Cookie");
       res.setHeader("Access-Control-Allow-Credentials", "true");
-      res.setHeader("Content-Type", "application/json");
 
       if (req.url !== "/favicon.ico") {
         try {
@@ -64,49 +55,32 @@ export default class Server {
 
           let startTime;
           res.end = (data, encoding, callback) => {
-            const networkLatencyMbps = this.#parseCookies(req);
-
             const diff = process.hrtime(startTime);
-            const endTime = diff[0] * NS_PER_SEC + diff[1] * MS_PER_NS;
+            const elapsedTotalTime = diff[0] * NS_PER_SEC + diff[1] * MS_PER_NS;
 
-            const elapsedNetworkTime = currentNode.metrics["timeElapsed"];
-            currentNode.metrics["tn"] += elapsedNetworkTime;
-            currentNode.metrics["tc"] += endTime - elapsedNetworkTime;
+            const remainder = currentNode.profiler.currentlyElapsed;
+            currentNode.metrics.en[0] = remainder;
 
-            const avgElapsedNetworkTime = parseFloat(
-              (currentNode.metrics["tn"] / currentNode.metrics["en"]).toFixed(2)
-            );
+            const computeTime = elapsedTotalTime - remainder;
 
-            const avgElapsedComputeTime = parseFloat(
-              (currentNode.metrics["tc"] / currentNode.metrics["en"]).toFixed(2)
-            );
-
-            /*
-            
-            Find the defining difference
-
-            */
-
-            const branch = null;
+            const routeTelemetry = JSON.stringify({
+              slug: currentNode.slug,
+              networkTimes: currentNode.metrics.en,
+              computeTime,
+            });
 
             res.setHeader(
               "Set-Cookie",
-              `insourceBranch=${branch}; Path=/; Domain=localhost`
+              `routeTelemetry=${routeTelemetry}; Path=/; Domain=localhost`
             );
 
-            console.log({
-              avgElapsedNetworkTime,
-              avgElapsedComputeTime,
-              clientLatencyMbps: networkLatencyMbps,
-            });
-
+            console.log(JSON.parse(routeTelemetry));
+            currentNode.metrics.en = [];
             res.__proto__.end.call(res, data, encoding, callback);
           };
 
-          currentNode.metrics["timeElapsed"] = 0;
-          currentNode.metrics["en"] += 1;
-
           currentNode.profiler.enable();
+          await sleep(0);
 
           startTime = process.hrtime();
           await currentNode.cb(req, res);
@@ -114,6 +88,9 @@ export default class Server {
           if (e.message === "Not Found") {
             res.writeHead(404);
             res.end();
+          } else {
+            res.writeHead(400);
+            res.end(e.message);
           }
         }
       }

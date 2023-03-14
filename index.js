@@ -1,32 +1,29 @@
 import Server from "./server.js";
 import async_hooks from "node:async_hooks";
-import { init, before, after } from "./hooks.js";
+import { init, after } from "./hooks.js";
 
 export class Router extends Server {
   #generateMetrics(requestType, destination, cb) {
     destination.profiler = async_hooks.createHook({
       init,
-      before,
       after,
     });
     destination.cb = cb;
     destination.metrics = {
-      timeElapsed: 0,
-      tn: 0,
-      tc: 0,
-      en: 0,
+      en: [],
+      ec: 0,
     };
 
     Object.assign(destination.profiler, {
-      requestType,
       destination,
+      currentlyElapsed: 0,
     });
   }
 
-  static #populateRoutes(requestType, branch) {
+  static #populateRoutes(requestType, slug) {
     let currentNode = Router.routes.get(requestType);
 
-    let destinations = branch.split("/");
+    let destinations = slug.split("/");
     if (destinations[0] == "") {
       destinations.shift();
     }
@@ -41,30 +38,30 @@ export class Router extends Server {
     return currentNode;
   }
 
-  get(branch, cb) {
-    let destination = Router.#populateRoutes("GET", branch);
-    destination.branch = branch;
+  get(slug, cb) {
+    let destination = Router.#populateRoutes("GET", slug);
+    destination.slug = slug;
 
     this.#generateMetrics("GET", destination, cb);
   }
 
-  post(branch, cb) {
-    let destination = Router.#populateRoutes("POST", branch);
-    destination.branch = branch;
+  post(slug, cb) {
+    let destination = Router.#populateRoutes("POST", slug);
+    destination.slug = slug;
 
     this.#generateMetrics("POST", destination, cb);
   }
 
-  put(branch, cb) {
-    let destination = Router.#populateRoutes("PUT", branch);
-    destination.branch = branch;
+  put(slug, cb) {
+    let destination = Router.#populateRoutes("PUT", slug);
+    destination.slug = slug;
 
     this.#generateMetrics("PUT", destination, cb);
   }
 
-  delete(branch, cb) {
-    let destination = Router.#populateRoutes("DELETE", branch);
-    destination.branch = branch;
+  delete(slug, cb) {
+    let destination = Router.#populateRoutes("DELETE", slug);
+    destination.slug = slug;
 
     this.#generateMetrics("DELETE", destination, cb);
   }
